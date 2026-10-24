@@ -994,7 +994,7 @@ function unlockApp() {
     initDashboard();
     isDashboardInitialized = true;
   }
-  requestBridgeSync();
+  fetchCloudData();
 }
 
 function lockDashboard() {
@@ -1018,21 +1018,19 @@ function lockDashboard() {
 }
 window.lockDashboard = lockDashboard;
 
-// Cross-domain Sync Bridge (Reads live visits from brainshometutors.in)
-function requestBridgeSync() {
-  const iframe = document.getElementById('bhtSyncBridge');
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.postMessage({ action: 'get_analytics', pin: SECRET_PIN }, '*');
-  }
-}
-
-window.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'BHT_SYNC_RESPONSE') {
-    if (e.data.store && Array.isArray(e.data.store.visits)) {
+// ═══════════════════════════════════════════════════════════════════════════
+// CLOUD SYNC: FETCH VISITS & LEADS FROM ANY MOBILE / LAPTOP GLOBALLY
+// ═══════════════════════════════════════════════════════════════════════════
+async function fetchCloudData() {
+  try {
+    const res = await fetch('https://www.brainshometutors.in/api/data');
+    if (!res.ok) return;
+    const cloudStore = await res.json();
+    if (cloudStore && Array.isArray(cloudStore.visits)) {
       const local = loadStore();
       const existingTs = new Set(local.visits.map(v => v.ts));
       let added = 0;
-      e.data.store.visits.forEach(v => {
+      cloudStore.visits.forEach(v => {
         if (!existingTs.has(v.ts)) {
           local.visits.push(v);
           existingTs.add(v.ts);
@@ -1040,9 +1038,9 @@ window.addEventListener('message', (e) => {
         }
       });
       const existingWa = new Set(local.wa.map(w => w.ts));
-      e.data.store.wa.forEach(w => { if (!existingWa.has(w.ts)) { local.wa.push(w); existingWa.add(w.ts); } });
+      (cloudStore.wa || []).forEach(w => { if (!existingWa.has(w.ts)) { local.wa.push(w); existingWa.add(w.ts); added++; } });
       const existingCalls = new Set(local.calls.map(c => c.ts));
-      e.data.store.calls.forEach(c => { if (!existingCalls.has(c.ts)) { local.calls.push(c); existingCalls.add(c.ts); } });
+      (cloudStore.calls || []).forEach(c => { if (!existingCalls.has(c.ts)) { local.calls.push(c); existingCalls.add(c.ts); added++; } });
 
       if (added > 0) {
         saveStore(local);
@@ -1055,8 +1053,9 @@ window.addEventListener('message', (e) => {
         renderGoalTracker();
       }
     }
-  }
-});
+  } catch (err) {}
+}
+window.fetchCloudData = fetchCloudData;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SECTION 16: INITIALISE DASHBOARD
@@ -1111,10 +1110,10 @@ function initDashboard() {
     }
   });
 
-  // 11. Active Auto-Refresh Poll (Checks localStorage & requests bridge sync every 3s)
+  // 11. Active Auto-Refresh Poll (Checks cloud API every 3s)
   let lastCount = loadStore().visits.length;
   setInterval(() => {
-    requestBridgeSync();
+    fetchCloudData();
     const nowCount = loadStore().visits.length;
     if (nowCount !== lastCount) {
       lastCount = nowCount;
