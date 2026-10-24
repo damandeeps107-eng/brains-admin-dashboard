@@ -1064,6 +1064,24 @@ async function fetchCloudData() {
         initReferrerChart(currentPeriod);
         renderGoalTracker();
       }
+
+      // Merge Cloud Leads (Real Student Inquiries with Name, Phone, Course)
+      if (cloudStore.leads && Array.isArray(cloudStore.leads)) {
+        const existingIds = new Set(leads.map(l => l.id || (l.phone + l.ts)));
+        let leadsAdded = 0;
+        cloudStore.leads.forEach(cl => {
+          const key = cl.id || (cl.phone + cl.ts);
+          if (!existingIds.has(key)) {
+            leads.unshift(cl);
+            existingIds.add(key);
+            leadsAdded++;
+          }
+        });
+        if (leadsAdded > 0) {
+          saveLeads();
+          renderLeadsTable();
+        }
+      }
     }
   } catch (err) {
   } finally {
