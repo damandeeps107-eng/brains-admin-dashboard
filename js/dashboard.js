@@ -1021,9 +1021,21 @@ window.lockDashboard = lockDashboard;
 // ═══════════════════════════════════════════════════════════════════════════
 // CLOUD SYNC: FETCH VISITS & LEADS FROM ANY MOBILE / LAPTOP GLOBALLY
 // ═══════════════════════════════════════════════════════════════════════════
+let isFetchingCloud = false;
+
 async function fetchCloudData() {
+  if (isFetchingCloud) return;
+  isFetchingCloud = true;
+
   try {
-    const res = await fetch('https://www.brainshometutors.in/api/data');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const res = await fetch('https://www.brainshometutors.in/api/data', {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
     if (!res.ok) return;
     const cloudStore = await res.json();
     if (cloudStore && Array.isArray(cloudStore.visits)) {
@@ -1053,7 +1065,10 @@ async function fetchCloudData() {
         renderGoalTracker();
       }
     }
-  } catch (err) {}
+  } catch (err) {
+  } finally {
+    isFetchingCloud = false;
+  }
 }
 window.fetchCloudData = fetchCloudData;
 
@@ -1110,22 +1125,13 @@ function initDashboard() {
     }
   });
 
-  // 11. Active Auto-Refresh Poll (Checks cloud API every 3s)
-  let lastCount = loadStore().visits.length;
-  setInterval(() => {
-    fetchCloudData();
-    const nowCount = loadStore().visits.length;
-    if (nowCount !== lastCount) {
-      lastCount = nowCount;
-      updateKPIs(currentPeriod);
-      initTrafficChart(currentPeriod);
-      initPageChart(currentPeriod);
-      initDeviceChart(currentPeriod);
-      initHoursChart(currentPeriod);
-      initReferrerChart(currentPeriod);
-      renderGoalTracker();
+  // 11. Smooth Background Cloud Sync (Non-blocking, every 8s & on tab focus)
+  setInterval(fetchCloudData, 8000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      fetchCloudData();
     }
-  }, 3000);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
